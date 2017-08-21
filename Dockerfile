@@ -1,18 +1,27 @@
-FROM debian:jessie-slim
+FROM alpine:edge
 
-# Adapted from https://github.com/Ulexus/docker-mms-agent
+# Adapted from https://github.com/rheosystems/dockerfiles/tree/master/mongodb-monitoring-agent
 
-RUN apt-get update && apt-get install -y curl logrotate
+RUN apk --update add \
+  bash \
+  curl \
+  cyrus-sasl-dev \
+  logrotate && \
+  rm -rf /var/cache/apk/*
+
+# Put some libraries where expected for monitoring-agent (as we are on Alpine)
+RUN mkdir /lib64 && ln -s /lib/libc.musl-x86_64.so.1 /lib64/ld-linux-x86-64.so.2 && ln -s /usr/lib/libsasl2.so.3 /usr/lib/libsasl2.so.2
+
+RUN adduser -S mongodb-mms-agent
+USER mongodb-mms-agent
+WORKDIR /home/mongodb-mms-agent
 
 # Get latest from https://mms.mongodb.com/settings/monitoring-agent
-RUN curl -sSL https://cloud.mongodb.com/download/agent/monitoring/mongodb-mms-monitoring-agent_6.0.0.381-1_amd64.deb -o mms.deb
-RUN dpkg -i mms.deb
-RUN rm mms.deb
+ENV MMS_VERSION 6.0.0.381-1
+RUN curl -sSL https://cloud.mongodb.com/download/agent/monitoring/mongodb-mms-monitoring-agent-${MMS_VERSION}.linux_x86_64.tar.gz | tar -xz --strip-components=1
+RUN chmod +w monitoring-agent.config
 
-ADD entrypoint.sh /usr/bin/entrypoint.sh
-RUN chmod +x /usr/bin/entrypoint.sh
+COPY entrypoint.sh .
+ENTRYPOINT ["/home/mongodb-mms-agent/entrypoint.sh"]
 
-ENTRYPOINT ["/usr/bin/entrypoint.sh"]
-
-USER mongodb-mms-agent
-CMD ["mongodb-mms-monitoring-agent","-conf","/etc/mongodb-mms/monitoring-agent.config","-loglevel","warn"]
+CMD ["/home/mongodb-mms-agent/mongodb-mms-monitoring-agent","-loglevel","warn"]
